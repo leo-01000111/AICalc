@@ -69,7 +69,7 @@ Both models use character-level tokenisation over a 14-token vocabulary: `<START
 
 | Model | Val acc |
 |---|---|
-| Seq2seq (bidirectional) | ~90% |
+| Seq2seq (bidirectional) | 92.66% |
 | Transformer | 96.66% |
 
 The transformer number is after 500 epochs. The seq2seq number is preliminary — the bidirectional encoder pushed it from a ~79% ceiling to 70% by epoch 40, trajectory still climbing.
