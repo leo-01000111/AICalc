@@ -1,0 +1,10 @@
+embed_size=64
+hidden_size=256
+num_layers=1
+batch_size=256
+learning_rate=0.001
+num_epochs=300
+end_loss_weight=2.0
+grad_clip=1.0
+weight_decay=0.0001
+seed=42
