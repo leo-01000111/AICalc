@@ -2,22 +2,22 @@
 
 A calculator where the "compute" button is a neural network.
 
-You type `125+42` or `20-100`, and instead of evaluating the expression arithmetically, the model predicts the answer character by character — the same way a language model generates text. Two architectures are implemented and compared: a GRU-based seq2seq with Bahdanau attention, and a Transformer encoder-decoder. Both operate on addition and subtraction mod 128 (so all operands and results live in [0, 127]).
+You type `125+42` or `20-100`. Instead of evaluating the expression, the model predicts the answer one character at a time, the way a language model generates text. There are two architectures: a GRU seq2seq with Bahdanau attention, and a Transformer encoder-decoder. Both work on addition and subtraction mod 128, so every operand and result is in [0, 127].
 
-The interesting part isn't the calculator. It's watching the training curves. Both models exhibit **grokking** — they memorise the training set first (train accuracy climbs, validation stays flat), then at some point validation accuracy suddenly jumps to match. The transformer took ~500 epochs to generalise; the seq2seq did it faster but needed a bidirectional encoder to break past ~79%.
-
----
+What I wanted to see was the training curves. Both models grok: they memorise the training set first (train accuracy climbs while validation stays flat), and then validation accuracy jumps up to match. The Transformer took about 500 epochs to generalise. The seq2seq got there faster, but only after I made its encoder bidirectional; before that it stalled at around 79%.
 
 ## Setup
+
+You need Python 3.11+ and, for the GUI, tkinter.
 
 ```
 pip install torch
 python generate_data.py
 ```
 
-That writes `data/train.csv`, `data/val.csv`, and `data/test.csv` — all 32,768 combinations of operands × operations, shuffled once with a fixed seed.
+`pyproject.toml` and `uv.lock` are also in the repo, so `uv sync` works as well.
 
----
+`generate_data.py` writes `data/train.csv`, `data/val.csv` and `data/test.csv`. Together they hold all 32,768 operand/operation combinations, shuffled once with a fixed seed and split 70/15/15.
 
 ## Training
 
@@ -26,50 +26,49 @@ python train_seq2seq.py
 python train_transformer.py
 ```
 
-Hyperparameters live in `setup_seq2seq.txt` and `setup_transformer.txt` — edit them directly, no flags needed. Both scripts track the best validation checkpoint throughout and prompt to save at the end.
+Hyperparameters are in `setup_seq2seq.txt` and `setup_transformer.txt`. Edit the files directly; there are no command-line flags. Both scripts keep the best validation checkpoint and ask whether to save it at the end. Checkpoints go to `models/<model_type>/<timestamp>/`, which is git-ignored, so a fresh clone has to train before the GUI or console has anything to load.
 
-If you've already run a training session and want to continue it (say, another 500 epochs on top of a saved run), the script will detect the existing checkpoint and offer to resume from it. `num_epochs` in the setup file is the total epoch count, so bump it before resuming.
-
----
+To continue a run (say, another 500 epochs on top of a saved one), start the script again. It finds the existing checkpoint and offers to resume. `num_epochs` in the setup file is the total epoch count, so raise it before resuming.
 
 ## Running
 
-**GUI:**
+GUI:
+
 ```
 python ui.py
 ```
 
-Pick a model type, select a checkpoint from the dropdown, hit Load, then use the numpad or your keyboard. The right panel keeps a scrollable history with correct/wrong colour-coded.
+Pick a model type, choose a checkpoint from the dropdown, press Load, then use the keypad or your keyboard. The right panel keeps a scrollable history with correct and wrong answers colour-coded.
 
-**Console:**
+Console:
+
 ```
 python main.py
 ```
 
-Prompts you to pick a model and checkpoint, then loops on expressions until you type `quit`.
+It asks for a model and checkpoint, then reads expressions until you type `quit`. Operands must be in [0, 127].
 
-**Evaluation** (side-by-side test-set comparison of both models):
+Evaluation, a side-by-side comparison of both models on the test split (needs a saved checkpoint of each):
+
 ```
 python evaluate.py
 ```
 
----
-
 ## Architecture notes
 
-**Seq2seq** — bidirectional GRU encoder, single-direction GRU decoder with additive (Bahdanau) attention. The encoder reads the input string both forwards and backwards; the two final hidden states are averaged to seed the decoder. Teacher forcing decays linearly from 100% to 0% over the course of training.
+Seq2seq: a bidirectional GRU encoder and a single-direction GRU decoder with additive (Bahdanau) attention. The encoder reads the input forwards and backwards, and the two final hidden states are averaged to start the decoder. Teacher forcing falls linearly from 100% to 0% over training. The optimiser is Adam with weight decay 1e-4.
 
-**Transformer** — standard encoder-decoder with sinusoidal positional encoding. No teacher forcing schedule; full teacher forcing throughout training, greedy autoregressive decoding at inference. AdamW with weight decay is what eventually triggers generalisation — without it the model memorises indefinitely.
+Transformer: a standard encoder-decoder with sinusoidal positional encoding. It uses full teacher forcing throughout training and greedy autoregressive decoding at inference. It is trained with AdamW, and the weight decay is what eventually made it generalise; without it the model kept memorising.
 
-Both models use character-level tokenisation over a 14-token vocabulary: `<START>`, `<END>` (doubled as padding), digits 0–9, `+`, `-`.
-
----
+Both models tokenise by character over a 14-token vocabulary: `<START>`, `<END>` (also used as padding), the digits 0 to 9, `+` and `-`.
 
 ## Results
 
+Accuracy is exact match on the whole answer string, measured on the validation split.
+
 | Model | Val acc |
 |---|---|
-| Seq2seq (bidirectional) | 92.66% |
-| Transformer | 96.66% |
+| Seq2seq (bidirectional encoder, 300 epochs) | 92.66% |
+| Transformer (about 500 epochs) | 96.66% |
 
-The transformer number is after 500 epochs. The seq2seq number is preliminary — the bidirectional encoder pushed it from a ~79% ceiling to 70% by epoch 40, trajectory still climbing.
+The bidirectional encoder is what lifted the seq2seq from its ~79% plateau to the number above.
